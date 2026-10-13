@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>TripBook Demo</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; background: #f6f7f9; color: #1d2330; }
+  header { background: #1d4ed8; color: #fff; padding: 14px 16px; font-weight: 600; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px; }
+  section { background: #fff; border-radius: 10px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  label { display: block; font-size: 14px; margin: 10px 0 4px; }
+  input, select, button { font: inherit; padding: 9px 10px; border-radius: 6px; border: 1px solid #c7ccd6; width: 100%; box-sizing: border-box; }
+  button { background: #1d4ed8; color: #fff; border: none; cursor: pointer; margin-top: 12px; }
+  button.secondary { background: #6b7280; }
+  .tour { border: 1px solid #e3e6ec; border-radius: 8px; padding: 12px; margin-top: 10px; }
+  .row { display: flex; justify-content: space-between; padding: 4px 0; }
+  .error { color: #b91c1c; margin-top: 8px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<header>TripBook Demo</header>
+<main>
+  <section id="search-section">
+    <h2>Find a trip</h2>
+    <label for="destination">Destination</label>
+    <input id="destination" placeholder="e.g. Banff" />
+    <label for="type">Type</label>
+    <select id="type">
+      <option value="">Any</option>
+      <option value="tour">Multi-day tour</option>
+      <option value="activity">Day activity</option>
+      <option value="cruise">Cruise</option>
+    </select>
+    <button id="search-btn">Search</button>
+    <div id="results" aria-live="polite"></div>
+  </section>
+
+  <section id="booking-section" class="hidden">
+    <h2>Guest details</h2>
+    <p id="selected-tour"></p>
+    <label for="guest-name">Full name</label>
+    <input id="guest-name" />
+    <label for="email">Email</label>
+    <input id="email" type="email" />
+    <label for="travellers">Travellers</label>
+    <input id="travellers" type="number" min="1" max="9" value="1" />
+    <button id="continue-btn">Continue to payment</button>
+    <div class="error" id="booking-error" role="alert"></div>
+  </section>
+
+  <section id="payment-section" class="hidden">
+    <h2>Payment</h2>
+    <div id="price-summary"></div>
+    <label for="card">Card number</label>
+    <input id="card" placeholder="4242 4242 4242 4242" />
+    <button id="pay-btn">Pay now</button>
+    <div class="error" id="payment-error" role="alert"></div>
+  </section>
+
+  <section id="confirmation-section" class="hidden">
+    <h2 id="confirmation-title">Booking confirmed</h2>
+    <p>Reference: <strong id="booking-ref"></strong></p>
+    <p>Status: <strong id="booking-status"></strong></p>
+    <button id="cancel-btn" class="secondary">Cancel booking</button>
+    <p id="refund-info"></p>
+  </section>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const money = (c) => '$' + (c / 100).toFixed(2);
+  let selectedTour = null;
+  let booking = null;
+
+  async function call(method, url, body) {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+    return { status: res.status, data: await res.json() };
+  }
+
+  $('search-btn').onclick = async () => {
+    const q = new URLSearchParams({ destination: $('destination').value, type: $('type').value });
+    const { data } = await call('GET', '/api/tours?' + q);
+    const box = $('results');
+    if (!data.length) { box.innerHTML = '<p data-testid="no-results">No trips found. Try another destination.</p>'; return; }
+    box.innerHTML = data.map((t) => `
+      <div class="tour" data-testid="tour-card" data-tour-id="${t.id}">
+        <strong>${t.name}</strong>
+        <div class="row"><span>Departs ${t.departure}</span><span>${money(t.priceCents)} / person</span></div>
+        <div class="row"><span>${t.seats} seats left</span></div>
+        <button data-select="${t.id}" ${t.seats === 0 ? 'disabled' : ''}>Select</button>
+      </div>`).join('');
+    box.querySelectorAll('[data-select]').forEach((b) => b.onclick = () => {
+      selectedTour = data.find((t) => t.id === b.dataset.select);
+      $('selected-tour').textContent = selectedTour.name;
+      $('booking-section').classList.remove('hidden');
+    });
+  };
+
+  $('continue-btn').onclick = async () => {
+    $('booking-error').textContent = '';
+    const { status, data } = await call('POST', '/api/bookings', {
+      tourId: selectedTour.id, guestName: $('guest-name').value, email: $('email').value, travellers: Number($('travellers').value),
+    });
+    if (status !== 201) { $('booking-error').textContent = data.error; return; }
+    booking = data;
+    $('price-summary').innerHTML = `
+      <div class="row"><span>Base (${data.travellers} × ${money(selectedTour.priceCents)})</span><span data-testid="base">${money(data.baseCents)}</span></div>
+      <div class="row"><span>Taxes</span><span data-testid="tax">${money(data.taxCents)}</span></div>
+      <div class="row"><strong>Total</strong><strong data-testid="total">${money(data.totalCents)}</strong></div>`;
+    $('payment-section').classList.remove('hidden');
+  };
+
+  $('pay-btn').onclick = async () => {
+    $('payment-error').textContent = '';
+    const { status, data } = await call('POST', `/api/bookings/${booking.ref}/pay`, { cardNumber: $('card').value });
+    if (status !== 200) { $('payment-error').textContent = data.error; return; }
+    booking = data;
+    $('booking-ref').textContent = data.ref;
+    $('booking-status').textContent = data.status;
+    $('payment-section').classList.add('hidden');
+    $('confirmation-section').classList.remove('hidden');
+  };
+
+  $('cancel-btn').onclick = async () => {
+    const { status, data } = await call('POST', `/api/bookings/${booking.ref}/cancel`);
+    if (status !== 200) return;
+    $('confirmation-title').textContent = 'Booking cancelled';
+    $('booking-status').textContent = data.status;
+    $('refund-info').textContent = `Refund: ${money(data.refundCents)} (${data.refundPercent}%)`;
+    $('cancel-btn').disabled = true;
+  };
+</script>
+</body>
+</html>

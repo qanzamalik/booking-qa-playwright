@@ -1,0 +1,21 @@
+{
+  "name": "booking-qa-playwright",
+  "version": "1.0.0",
+  "description": "Playwright + TypeScript QA suite for a tour/cruise booking flow: search, booking, payment, commission, cancellation and refunds",
+  "scripts": {
+    "test": "playwright test",
+    "test:api": "playwright test --project=api",
+    "test:ui": "playwright test --project=chromium",
+    "test:mobile": "playwright test --project=mobile-chrome --project=mobile-safari",
+    "typecheck": "tsc",
+    "report": "playwright show-report",
+    "app": "TEST_MODE=1 node app/server.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@playwright/test": "^1.56.1",
+    "@types/node": "^22.20.5",
+    "typescript": "^5.6.3"
+  }
+}
