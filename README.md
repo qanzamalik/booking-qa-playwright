@@ -1,4 +1,5 @@
 # Booking QA — Playwright + TypeScript
+[![Playwright Tests](https://github.com/qanzamalik/booking-qa-playwright/actions/workflows/playwright.yml/badge.svg)](https://github.com/qanzamalik/booking-qa-playwright/actions/workflows/playwright.yml)
 
 A Playwright test suite for a travel booking flow: **search → booking → payment → commission → cancellation → refund**.
 
